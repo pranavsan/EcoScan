@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: EcoScan API - AI waste classification and community reporting
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: scan
+    description: AI waste scanning
+  - name: reports
+    description: Waste reports
+  - name: analytics
+    description: Analytics and insights
+  - name: areas
+    description: Geographic areas
+
 paths:
   /healthz:
     get:
@@ -24,6 +33,222 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /scan:
+    post:
+      operationId: scanWaste
+      tags: [scan]
+      summary: Scan image for waste classification
+      description: Analyzes an uploaded image using AI to classify waste type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanInput"
+      responses:
+        "200":
+          description: Classification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanResult"
+
+  /reports:
+    get:
+      operationId: listReports
+      tags: [reports]
+      summary: List waste reports
+      parameters:
+        - in: query
+          name: area
+          schema:
+            type: string
+          description: Filter by area name
+        - in: query
+          name: wasteType
+          schema:
+            type: string
+          description: Filter by waste type
+        - in: query
+          name: status
+          schema:
+            type: string
+          description: Filter by status
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          description: Maximum number of reports
+      responses:
+        "200":
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Report"
+    post:
+      operationId: createReport
+      tags: [reports]
+      summary: Create a waste report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportInput"
+      responses:
+        "201":
+          description: Created report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /reports/{id}:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Get a report by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Report details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateReport
+      tags: [reports]
+      summary: Update report status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportUpdate"
+      responses:
+        "200":
+          description: Updated report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+    delete:
+      operationId: deleteReport
+      tags: [reports]
+      summary: Delete a report
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /analytics/waste-types:
+    get:
+      operationId: getWasteTypeStats
+      tags: [analytics]
+      summary: Waste type distribution
+      parameters:
+        - in: query
+          name: area
+          schema:
+            type: string
+          description: Filter by area
+      responses:
+        "200":
+          description: Waste type breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WasteTypeStat"
+
+  /analytics/hotspots:
+    get:
+      operationId: getHotspots
+      tags: [analytics]
+      summary: Top waste hotspot areas
+      responses:
+        "200":
+          description: Hotspot areas ranked by report count
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hotspot"
+
+  /analytics/trends:
+    get:
+      operationId: getTrends
+      tags: [analytics]
+      summary: Waste reports over time
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+          description: Number of days to look back (default 30)
+      responses:
+        "200":
+          description: Daily report counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrendPoint"
+
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: Overall analytics summary
+      responses:
+        "200":
+          description: Dashboard summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+
+  /areas:
+    get:
+      operationId: listAreas
+      tags: [areas]
+      summary: List all areas
+      responses:
+        "200":
+          description: List of areas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Area"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +259,205 @@ components:
       required:
         - status
 
+    ScanInput:
+      type: object
+      required:
+        - imageBase64
+      properties:
+        imageBase64:
+          type: string
+          description: Base64-encoded image data
+
+    ScanResult:
+      type: object
+      required:
+        - wasteType
+        - confidence
+        - description
+        - suggestions
+      properties:
+        wasteType:
+          type: string
+          description: Classified waste type (e.g. plastic, organic, electronic, hazardous, paper, metal, glass, mixed)
+        confidence:
+          type: number
+          description: Confidence score 0-1
+        description:
+          type: string
+          description: AI description of the waste
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: Disposal suggestions
+        severity:
+          type: ["string", "null"]
+          description: Severity level (low, medium, high)
+
+    Report:
+      type: object
+      required:
+        - id
+        - wasteType
+        - location
+        - area
+        - status
+        - severity
+        - createdAt
+      properties:
+        id:
+          type: integer
+        wasteType:
+          type: string
+        location:
+          type: string
+          description: Human-readable location description
+        area:
+          type: string
+          description: Area/district name
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        status:
+          type: string
+          description: pending, reported, in_progress, resolved
+        severity:
+          type: string
+          description: low, medium, high
+        description:
+          type: ["string", "null"]
+        imageBase64:
+          type: ["string", "null"]
+        reporterName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReportInput:
+      type: object
+      required:
+        - wasteType
+        - location
+        - area
+        - severity
+      properties:
+        wasteType:
+          type: string
+        location:
+          type: string
+        area:
+          type: string
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        severity:
+          type: string
+        description:
+          type: ["string", "null"]
+        imageBase64:
+          type: ["string", "null"]
+        reporterName:
+          type: ["string", "null"]
+
+    ReportUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+        description:
+          type: ["string", "null"]
+
+    WasteTypeStat:
+      type: object
+      required:
+        - wasteType
+        - count
+        - percentage
+      properties:
+        wasteType:
+          type: string
+        count:
+          type: integer
+        percentage:
+          type: number
+
+    Hotspot:
+      type: object
+      required:
+        - area
+        - count
+        - topWasteType
+        - pendingCount
+      properties:
+        area:
+          type: string
+        count:
+          type: integer
+        topWasteType:
+          type: string
+        pendingCount:
+          type: integer
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+
+    TrendPoint:
+      type: object
+      required:
+        - date
+        - count
+      properties:
+        date:
+          type: string
+        count:
+          type: integer
+        resolved:
+          type: integer
+
+    AnalyticsSummary:
+      type: object
+      required:
+        - totalReports
+        - resolvedReports
+        - pendingReports
+        - inProgressReports
+        - topWasteType
+        - topArea
+        - reportsTodayCount
+      properties:
+        totalReports:
+          type: integer
+        resolvedReports:
+          type: integer
+        pendingReports:
+          type: integer
+        inProgressReports:
+          type: integer
+        topWasteType:
+          type: string
+        topArea:
+          type: string
+        reportsTodayCount:
+          type: integer
+
+    Area:
+      type: object
+      required:
+        - name
+        - reportCount
+      properties:
+        name:
+          type: string
+        reportCount:
+          type: integer
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]

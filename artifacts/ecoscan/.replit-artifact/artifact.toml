@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "EcoScan"
+version = "1.0.0"
+id = "artifacts/ecoscan"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22861
+
+[services.development]
+run = "pnpm --filter @workspace/ecoscan run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ecoscan", "run", "build" ]
+publicDir = "artifacts/ecoscan/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22861"
+BASE_PATH = "/"
