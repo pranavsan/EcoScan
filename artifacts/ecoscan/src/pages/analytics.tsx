@@ -1,25 +1,31 @@
-import { useGetWasteTypeStats, useGetHotspots, useGetTrends, useGetAnalyticsSummary, useListAreas } from "@workspace/api-client-react";
+import { useState, useMemo } from "react";
+import { useGetWasteTypeStats, useGetHotspots, useGetTrends, useGetAnalyticsSummary, useListAreas, useListReports } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UKHeatmap } from "@/components/map/uk-heatmap";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { useState } from "react";
-import { TrendingUp, MapPin, BarChart2, AlertCircle } from "lucide-react";
+import { TrendingUp, MapPin, BarChart2, AlertCircle, Layers } from "lucide-react";
 
-const CHART_COLORS = [
-  "hsl(155, 100%, 20%)",
-  "hsl(45, 93%, 47%)",
-  "hsl(210, 80%, 55%)",
-  "hsl(0, 75%, 55%)",
-  "hsl(270, 60%, 55%)",
-  "hsl(30, 85%, 55%)",
-  "hsl(180, 70%, 40%)",
-  "hsl(320, 60%, 55%)",
-];
+const WASTE_TYPES = ["plastic", "organic", "electronic", "hazardous", "paper", "metal", "glass", "mixed"];
+
+const WASTE_COLORS: Record<string, string> = {
+  plastic: "#3b82f6",
+  organic: "#22c55e",
+  electronic: "#a855f7",
+  hazardous: "#ef4444",
+  paper: "#f59e0b",
+  metal: "#64748b",
+  glass: "#06b6d4",
+  mixed: "#f97316",
+};
+
+const CHART_COLORS = Object.values(WASTE_COLORS);
 
 const SEVERITY_COLOR: Record<string, string> = {
   low: "bg-emerald-100 text-emerald-800",
@@ -30,6 +36,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 export default function Analytics() {
   const [filterArea, setFilterArea] = useState("all");
   const [trendDays, setTrendDays] = useState<number>(30);
+  const [activeWasteTypes, setActiveWasteTypes] = useState<Set<string>>(new Set());
 
   const { data: areas } = useListAreas();
   const { data: summary, isLoading: loadingSummary } = useGetAnalyticsSummary();
@@ -38,16 +45,39 @@ export default function Analytics() {
   });
   const { data: hotspots, isLoading: loadingHotspots } = useGetHotspots();
   const { data: trends, isLoading: loadingTrends } = useGetTrends({ days: trendDays });
+  const { data: allReports, isLoading: loadingReports } = useListReports({ limit: 500 });
 
   const resolutionRate = summary
     ? Math.round((summary.resolvedReports / Math.max(summary.totalReports, 1)) * 100)
     : 0;
 
+  function toggleWasteType(type: string) {
+    setActiveWasteTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
+  const heatmapReports = useMemo(
+    () =>
+      (allReports ?? []).map((r) => ({
+        wasteType: r.wasteType,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        severity: r.severity,
+      })),
+    [allReports]
+  );
+
+  const plotted = heatmapReports.filter((r) => r.latitude != null).length;
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-muted-foreground">Environmental intelligence — waste patterns, hotspots, and trends.</p>
+        <p className="text-muted-foreground">UK-wide waste intelligence — patterns, hotspots, and heatmaps.</p>
       </div>
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -71,6 +101,73 @@ export default function Analytics() {
         ))}
       </div>
 
+      {/* UK Heatmap */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="w-4 h-4" />
+                UK Waste Heatmap
+              </CardTitle>
+              <CardDescription>
+                Interactive map of all {plotted} geolocated reports across the UK. Toggle waste types to filter.
+              </CardDescription>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              size="sm"
+              variant={activeWasteTypes.size === 0 ? "default" : "outline"}
+              className="h-7 text-xs"
+              onClick={() => setActiveWasteTypes(new Set())}
+            >
+              All Waste
+            </Button>
+            {WASTE_TYPES.map((type) => {
+              const active = activeWasteTypes.has(type);
+              return (
+                <Button
+                  key={type}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs capitalize gap-1.5"
+                  style={
+                    active
+                      ? { background: WASTE_COLORS[type] + "22", borderColor: WASTE_COLORS[type], color: WASTE_COLORS[type] }
+                      : {}
+                  }
+                  onClick={() => toggleWasteType(type)}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full inline-block shrink-0"
+                    style={{ background: WASTE_COLORS[type] }}
+                  />
+                  {type}
+                </Button>
+              );
+            })}
+          </div>
+        </CardHeader>
+        <CardContent className="p-3">
+          <div className="h-[500px] rounded-lg overflow-hidden border border-border">
+            {loadingReports ? (
+              <Skeleton className="h-full w-full" />
+            ) : (
+              <UKHeatmap reports={heatmapReports} activeTypes={activeWasteTypes} />
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+            {WASTE_TYPES.map((type) => (
+              <div key={type} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="w-3 h-3 rounded-full inline-block" style={{ background: WASTE_COLORS[type] }} />
+                <span className="capitalize">{type}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
@@ -82,7 +179,7 @@ export default function Analytics() {
               <CardDescription>Breakdown by category</CardDescription>
             </div>
             <Select value={filterArea} onValueChange={setFilterArea}>
-              <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-area-filter">
+              <SelectTrigger className="w-36 h-8 text-xs">
                 <SelectValue placeholder="All Areas" />
               </SelectTrigger>
               <SelectContent>
@@ -96,8 +193,6 @@ export default function Analytics() {
           <CardContent>
             {loadingWasteStats ? (
               <Skeleton className="h-64 w-full" />
-            ) : wasteStats?.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-muted-foreground">No data available</div>
             ) : (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -112,8 +207,8 @@ export default function Analytics() {
                       label={({ wasteType, percentage }) => `${wasteType} ${percentage}%`}
                       labelLine={false}
                     >
-                      {wasteStats?.map((_, i) => (
-                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      {wasteStats?.map((entry, i) => (
+                        <Cell key={i} fill={WASTE_COLORS[entry.wasteType] ?? CHART_COLORS[i % CHART_COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -128,14 +223,12 @@ export default function Analytics() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4" />
-                By Waste Type
-              </CardTitle>
-              <CardDescription>Count per category</CardDescription>
-            </div>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart2 className="w-4 h-4" />
+              Count by Type
+            </CardTitle>
+            <CardDescription>Number of reports per waste category</CardDescription>
           </CardHeader>
           <CardContent>
             {loadingWasteStats ? (
@@ -150,8 +243,8 @@ export default function Analytics() {
                       contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
                     />
                     <Bar dataKey="count" name="Reports" radius={[0, 4, 4, 0]}>
-                      {wasteStats?.map((_, i) => (
-                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      {wasteStats?.map((entry, i) => (
+                        <Cell key={i} fill={WASTE_COLORS[entry.wasteType] ?? CHART_COLORS[i % CHART_COLORS.length]} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -172,7 +265,7 @@ export default function Analytics() {
             <CardDescription>New and resolved reports trend</CardDescription>
           </div>
           <Select value={String(trendDays)} onValueChange={(v) => setTrendDays(Number(v))}>
-            <SelectTrigger className="w-28 h-8 text-xs" data-testid="select-trend-days">
+            <SelectTrigger className="w-28 h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -186,8 +279,6 @@ export default function Analytics() {
         <CardContent>
           {loadingTrends ? (
             <Skeleton className="h-72 w-full" />
-          ) : trends?.length === 0 ? (
-            <div className="h-72 flex items-center justify-center text-muted-foreground">No trend data for this period.</div>
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -199,8 +290,8 @@ export default function Analytics() {
                     contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
                   />
                   <Legend />
-                  <Line type="monotone" dataKey="count" name="New Reports" stroke="hsl(155, 100%, 20%)" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" dataKey="resolved" name="Resolved" stroke="hsl(45, 93%, 47%)" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="count" name="New Reports" stroke="#006633" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="resolved" name="Resolved" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -212,9 +303,9 @@ export default function Analytics() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            Waste Hotspots
+            UK Hotspots
           </CardTitle>
-          <CardDescription>Areas ranked by number of reports</CardDescription>
+          <CardDescription>Areas ranked by report volume</CardDescription>
         </CardHeader>
         <CardContent>
           {loadingHotspots ? (
@@ -224,20 +315,24 @@ export default function Analytics() {
           ) : hotspots?.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p>No hotspot data yet</p>
+              No hotspot data yet
             </div>
           ) : (
             <div className="space-y-2">
               {hotspots?.map((h, i) => (
-                <div key={h.area} className="flex items-center gap-4 p-3 rounded-lg hover:bg-accent/30 transition-colors" data-testid={`hotspot-${i}`}>
+                <div key={h.area} className="flex items-center gap-4 p-3 rounded-lg hover:bg-accent/30 transition-colors">
                   <span className="font-mono text-sm font-bold text-muted-foreground w-6 text-center">#{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{h.area}</p>
-                    <p className="text-xs text-muted-foreground">Top waste: <span className="capitalize">{h.topWasteType}</span></p>
+                    <p className="text-xs text-muted-foreground">
+                      Top waste: <span className="capitalize">{h.topWasteType}</span>
+                    </p>
                   </div>
                   <div className="text-right space-y-1">
                     <p className="font-bold text-sm">{h.count} reports</p>
-                    <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">{h.pendingCount} pending</Badge>
+                    <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                      {h.pendingCount} pending
+                    </Badge>
                   </div>
                 </div>
               ))}
