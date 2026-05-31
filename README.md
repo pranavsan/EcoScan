@@ -1,5 +1,5 @@
 # EcoScan
-
+EcoScan is a lightweight environmental scanning tool designed to help users quickly identify and understand the environmental impact of everyday products and materials.
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
